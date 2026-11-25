@@ -13,7 +13,17 @@ jobs:
     permissions:
       contents: write
 
+    env:
+      SHHH_VERSION_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+
     steps:
+      - name: Validate release tag format
+        run: |
+          if [[ ! "${SHHH_VERSION_TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Release tag '${SHHH_VERSION_TAG}' must follow semver format vX.Y.Z."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -47,6 +57,21 @@ jobs:
           SHHH_KEY_ALIAS: ${{ secrets.SHHH_KEY_ALIAS }}
           SHHH_KEY_PASSWORD: ${{ secrets.SHHH_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --stacktrace
+
+      - name: Verify APK version matches release tag
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          with open("app/build/outputs/apk/release/output-metadata.json") as f:
+              meta = json.load(f)
+          expected = os.environ["SHHH_VERSION_TAG"].removeprefix("v")
+          actual = meta["elements"][0]["versionName"]
+          code = meta["elements"][0]["versionCode"]
+          print(f"Release APK versionName={actual}, versionCode={code}")
+          if actual != expected:
+              print(f"::error::Built APK versionName '{actual}' != expected '{expected}'", file=sys.stderr)
+              sys.exit(1)
+          PY
 
       - name: Rename release APK
         run: mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/shhh-${GITHUB_REF_NAME}-release.apk"
