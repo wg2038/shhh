@@ -43,6 +43,9 @@ val hasEnvReleaseSigning = envKeystoreFile != null &&
     envKeyPassword != null
 
 val hasReleaseSigning = hasFileReleaseSigning || hasEnvReleaseSigning
+val requireReleaseSigning =
+    providers.environmentVariable("SHHH_REQUIRE_RELEASE_SIGNING").orNull.equals("true", ignoreCase = true) ||
+        providers.gradleProperty("requireReleaseSigning").orNull.equals("true", ignoreCase = true)
 
 abstract class GitReleaseTagsValueSource : ValueSource<String, GitReleaseTagsValueSource.Parameters> {
     interface Parameters : ValueSourceParameters {
@@ -261,6 +264,11 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            if (requireReleaseSigning && !hasReleaseSigning) {
+                throw GradleException(
+                    "Release signing is required (SHHH_REQUIRE_RELEASE_SIGNING=true), but no valid keystore was configured."
+                )
+            }
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {

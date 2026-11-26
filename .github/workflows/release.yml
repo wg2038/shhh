@@ -43,22 +43,30 @@ jobs:
       - name: Restore release signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.SHHH_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SHHH_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SHHH_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SHHH_KEY_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::warning::Release signing secrets not configured; falling back to debug signing."
-            exit 0
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Missing required release signing secrets (SHHH_KEYSTORE_BASE64, SHHH_KEYSTORE_PASSWORD, SHHH_KEY_ALIAS, SHHH_KEY_PASSWORD)."
+            exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 --decode > shhh-release.jks
+          if [ ! -s shhh-release.jks ]; then
+            echo "::error::Decoded shhh-release.jks is empty."
+            exit 1
+          fi
 
       - name: Build Release APK
         env:
+          SHHH_REQUIRE_RELEASE_SIGNING: "true"
           SHHH_KEYSTORE_FILE: shhh-release.jks
           SHHH_KEYSTORE_PASSWORD: ${{ secrets.SHHH_KEYSTORE_PASSWORD }}
           SHHH_KEY_ALIAS: ${{ secrets.SHHH_KEY_ALIAS }}
           SHHH_KEY_PASSWORD: ${{ secrets.SHHH_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --stacktrace
 
-      - name: Verify APK version matches release tag
+      - name: Verify APK version and release signature
         run: |
           python3 - <<'PY'
           import json, os, sys
@@ -72,6 +80,21 @@ jobs:
               print(f"::error::Built APK versionName '{actual}' != expected '{expected}'", file=sys.stderr)
               sys.exit(1)
           PY
+          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found in Android SDK build-tools."
+            exit 1
+          fi
+          CERTS=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk)
+          echo "$CERTS"
+          if echo "$CERTS" | grep -q "CN=Android Debug"; then
+            echo "::error::Release APK must not be signed with the Android Debug certificate."
+            exit 1
+          fi
+
+      - name: Clean up release keystore
+        if: always()
+        run: rm -f shhh-release.jks
 
       - name: Rename release APK
         run: mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/shhh-${GITHUB_REF_NAME}-release.apk"
