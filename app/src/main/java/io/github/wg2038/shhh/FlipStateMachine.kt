@@ -17,6 +17,7 @@ class FlipStateMachine(
         val downDebounceNoGyroMs: Long = 2_500L,
         val upDebounceMs: Long = 300L,
         val maxStillnessRetries: Int = 3,
+        val maxDownPendingMs: Long? = null,
         val minGravityMagnitude: Float = 8.0f,
         val maxGravityMagnitude: Float = 12.0f,
         // cos(15.2 deg) for face-down entry, cos(30.0 deg) for lift exit hysteresis.
@@ -78,7 +79,11 @@ class FlipStateMachine(
     private val downDebounceMs =
         if (hasGyroscope) config.downDebounceMs else config.downDebounceNoGyroMs
 
+    private val maxDownPendingMs =
+        config.maxDownPendingMs ?: (downDebounceMs * (config.maxStillnessRetries + 2).coerceAtLeast(1))
+
     private var deadlineMs = 0L
+    private var downPendingStartMs = 0L
     private var lastProximity: Proximity = defaultProximity()
     private var lastTiltExit: Boolean = false
 
@@ -90,10 +95,16 @@ class FlipStateMachine(
         lastProximity = defaultProximity()
         lastTiltExit = false
         deadlineMs = 0L
+        downPendingStartMs = 0L
     }
 
     fun onObservation(observation: Observation): Decision {
-        if (!observation.hasOrientationSample) return decision()
+        if (!observation.hasOrientationSample ||
+            !observation.gravityZ.isFinite() ||
+            !observation.horizontalGravity.isFinite()
+        ) {
+            return decision()
+        }
 
         val totalG = sqrt(
             observation.gravityZ * observation.gravityZ +
@@ -111,9 +122,7 @@ class FlipStateMachine(
         return when (phase) {
             Phase.IDLE -> {
                 if (tiltExit) {
-                    suppressedUntilLifted = false
-                    lastProximity = defaultProximity()
-                    lastTiltExit = false
+                    resetToIdle(clearSuppression = true)
                     return decision()
                 }
                 if (suppressedUntilLifted || !faceDownPose) return decision()
@@ -127,6 +136,7 @@ class FlipStateMachine(
                 stillnessRetryCount = 0
                 lastProximity = observation.proximity
                 lastTiltExit = false
+                downPendingStartMs = observation.timestampMs
                 deadlineMs = observation.timestampMs + downDebounceMs
                 return decision(
                     acquireWakeLockMs = downDebounceMs + WAKE_LOCK_MARGIN_MS,
@@ -140,10 +150,7 @@ class FlipStateMachine(
                 lastProximity = observation.proximity
 
                 if (!faceDownPose) {
-                    phase = Phase.IDLE
-                    pendingTarget = Target.NONE
-                    lastProximity = defaultProximity()
-                    lastTiltExit = false
+                    resetToIdle(clearSuppression = false)
                     return decision(
                         releaseWakeLock = true,
                         cancelScheduledCheck = true,
@@ -192,12 +199,7 @@ class FlipStateMachine(
 
             Phase.COOLDOWN -> {
                 if (tiltExit) {
-                    phase = Phase.IDLE
-                    pendingTarget = Target.NONE
-                    stillnessRetryCount = 0
-                    lastProximity = defaultProximity()
-                    lastTiltExit = false
-                    suppressedUntilLifted = false
+                    resetToIdle(clearSuppression = true)
                 }
                 return decision()
             }
@@ -224,15 +226,9 @@ class FlipStateMachine(
                 }
 
                 stillnessRetryCount++
-                if (stillnessRetryCount >= config.maxStillnessRetries) {
-                    phase = Phase.COOLDOWN
-                    pendingTarget = Target.NONE
-                    return decision(
-                        releaseWakeLock = true,
-                        cancelScheduledCheck = true,
-                        resetStillness = true,
-                        blockedByProximity = !proximityPermitted,
-                    )
+                val timedOut = timestampMs - downPendingStartMs >= maxDownPendingMs
+                if (stillnessRetryCount >= config.maxStillnessRetries || timedOut) {
+                    return enterCooldown(blockedByProximity = !proximityPermitted)
                 }
 
                 deadlineMs = timestampMs + downDebounceMs
@@ -249,13 +245,11 @@ class FlipStateMachine(
                     if (timestampMs < deadlineMs) {
                         return decision(scheduleCheckAtMs = deadlineMs)
                     }
-                    if (hasOpticalProximity && lastProximity is Proximity.Far && !lastTiltExit) {
+                    val shouldSuppress = hasOpticalProximity && lastProximity is Proximity.Far && !lastTiltExit
+                    resetToIdle(clearSuppression = false)
+                    if (shouldSuppress) {
                         suppressedUntilLifted = true
                     }
-                    phase = Phase.IDLE
-                    pendingTarget = Target.NONE
-                    lastProximity = defaultProximity()
-                    lastTiltExit = false
                     return decision(
                         exitDnd = true,
                         releaseWakeLock = true,
@@ -271,6 +265,9 @@ class FlipStateMachine(
 
     fun onMotionDisturbance(timestampMs: Long): Decision? {
         if (phase != Phase.DOWN_PENDING) return null
+        if (timestampMs - downPendingStartMs >= maxDownPendingMs) {
+            return enterCooldown(blockedByProximity = !isProximityPermittingAt())
+        }
         deadlineMs = timestampMs + downDebounceMs
         return decision(
             acquireWakeLockMs = downDebounceMs + WAKE_LOCK_MARGIN_MS,
@@ -279,18 +276,51 @@ class FlipStateMachine(
         )
     }
 
-    fun onExternalDndDisabled(timestampMs: Long): Decision {
+    fun onCallActive(): Decision? {
+        if (phase != Phase.DOWN_PENDING) return null
+        resetToIdle(clearSuppression = false)
+        return decision(
+            releaseWakeLock = true,
+            cancelScheduledCheck = true,
+            resetStillness = true,
+        )
+    }
+
+    fun onEnterDndFailed(): Decision {
+        return enterCooldown(blockedByProximity = false)
+    }
+
+    fun onExternalDndDisabled(): Decision {
+        resetToIdle(clearSuppression = false)
         suppressedUntilLifted = true
-        if (phase == Phase.FLIPPED || phase == Phase.DOWN_PENDING) {
-            phase = Phase.IDLE
-            pendingTarget = Target.NONE
-        }
-        lastProximity = defaultProximity()
-        lastTiltExit = false
         return decision(
             releaseWakeLock = true,
             cancelScheduledCheck = true,
         )
+    }
+
+    private fun enterCooldown(blockedByProximity: Boolean): Decision {
+        phase = Phase.COOLDOWN
+        pendingTarget = Target.NONE
+        return decision(
+            releaseWakeLock = true,
+            cancelScheduledCheck = true,
+            resetStillness = true,
+            blockedByProximity = blockedByProximity,
+        )
+    }
+
+    private fun resetToIdle(clearSuppression: Boolean) {
+        phase = Phase.IDLE
+        pendingTarget = Target.NONE
+        stillnessRetryCount = 0
+        lastProximity = defaultProximity()
+        lastTiltExit = false
+        deadlineMs = 0L
+        downPendingStartMs = 0L
+        if (clearSuppression) {
+            suppressedUntilLifted = false
+        }
     }
 
     private fun defaultProximity(): Proximity =

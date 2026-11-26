@@ -20,8 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -32,25 +30,23 @@ import org.json.JSONObject
 
 @Composable
 fun SystemBarsColorEffect(darkTheme: Boolean) {
-    val view = LocalView.current
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(darkTheme, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                applySystemBarAppearance(view, context, darkTheme)
+                applySystemBarAppearance(context, darkTheme)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        applySystemBarAppearance(view, context, darkTheme)
+        applySystemBarAppearance(context, darkTheme)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 }
 
-private fun applySystemBarAppearance(view: android.view.View, context: Context, darkTheme: Boolean) {
-    val targetWindow = (view.parent as? DialogWindowProvider)?.window
-        ?: (context as? Activity)?.window ?: return
+private fun applySystemBarAppearance(context: Context, darkTheme: Boolean) {
+    val targetWindow = (context as? Activity)?.window ?: return
     val insetsController = WindowCompat.getInsetsController(targetWindow, targetWindow.decorView)
     insetsController.isAppearanceLightStatusBars = !darkTheme
     insetsController.isAppearanceLightNavigationBars = !darkTheme
@@ -73,10 +69,13 @@ object MonetThemeResolver {
         Build.MANUFACTURER.equals("samsung", ignoreCase = true)
     }
 
-    private val StaticDefaultPrimaries = setOf(
+    private val StaticDefaultPurples = setOf(
         0xFF6650A4.toInt(),
         0xFF6750A4.toInt(),
         0xFFD0BCFF.toInt(),
+    )
+
+    private val StaticDefaultPrimaries = StaticDefaultPurples + setOf(
         0xFF475D92.toInt(),
         0xFFB0C6FF.toInt(),
         0xFF006493.toInt(),
@@ -118,9 +117,9 @@ object MonetThemeResolver {
                 "android.theme.customization.system_palette",
                 "android.theme.customization.accent_color",
             ).firstNotNullOfOrNull { key ->
-                json.optString(key).takeIf { it.isNotBlank() }
+                if (json.isNull(key)) null else json.optString(key).takeIf { it.isNotBlank() }
             } ?: return null
-            val cleaned = hexValue.trim().removePrefix("#")
+            val cleaned = hexValue.trim().removePrefix("#").removePrefix("0x").removePrefix("0X")
             val argbHex = when (cleaned.length) {
                 6 -> "FF$cleaned"
                 8 -> cleaned
@@ -234,9 +233,7 @@ object MonetThemeResolver {
             val wm = WallpaperManager.getInstance(context)
             val wallpaperColors = wm.getWallpaperColors(WallpaperManager.FLAG_SYSTEM)
                 ?: wm.getWallpaperColors(WallpaperManager.FLAG_LOCK)
-            (wallpaperColors?.primaryColor
-                ?: wallpaperColors?.secondaryColor
-                ?: wallpaperColors?.tertiaryColor)?.toArgb()
+            wallpaperColors?.primaryColor?.toArgb()
         } catch (_: Throwable) {
             null
         }
@@ -258,8 +255,9 @@ object MonetThemeResolver {
             Log.w(TAG, "Tier 1 (Native Monet) query failed", t)
         }
 
-        val nativeIsCustom = nativePrimary != null && nativePrimary !in StaticDefaultPrimaries
-        if ((isPixel || (!isSamsung && nativeIsCustom)) && nativeScheme != null) {
+        val nativeAccepted = nativePrimary != null &&
+            (isPixel || (!isSamsung && (nativePrimary !in StaticDefaultPurples || hasOverlay)))
+        if (nativeAccepted && nativeScheme != null) {
             Log.d(
                 TAG,
                 "Tier 1 (Native Monet) | mfg=${Build.MANUFACTURER} | primary=${hex(nativePrimary)} | overlay=$hasOverlay"

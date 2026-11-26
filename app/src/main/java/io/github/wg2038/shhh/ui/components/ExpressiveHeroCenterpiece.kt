@@ -45,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.toPath
 import io.github.wg2038.shhh.AppIcons
@@ -61,7 +62,8 @@ fun ExpressiveHeroCenterpiece(
     isFlippedDown: Boolean,
     isDndActive: Boolean,
     onToggle: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    heroSize: Dp = 260.dp,
 ) {
     val haptic = LocalHapticFeedback.current
     val heroActive = isRunning && isFlippedDown && isDndActive
@@ -91,7 +93,7 @@ fun ExpressiveHeroCenterpiece(
         if (!isRunning) return@LaunchedEffect
 
         val morphSpec = spring<Float>(
-            dampingRatio = 0.62f,
+            dampingRatio = 0.88f,
             stiffness = 180f,
             visibilityThreshold = 0.005f
         )
@@ -165,7 +167,7 @@ fun ExpressiveHeroCenterpiece(
     ) {
         Box(
             modifier = Modifier
-                .size(260.dp)
+                .size(heroSize)
                 .semantics { contentDescription = heroDescription }
                 .toggleable(
                     value = isRunning,
@@ -179,11 +181,12 @@ fun ExpressiveHeroCenterpiece(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Canvas(modifier = Modifier.size(260.dp)) {
+            Canvas(modifier = Modifier.size(heroSize)) {
                 val centerPt = this.center
 
                 val progress = morphProgress.value.coerceIn(0f, 1f)
-                morphSequence[currentMorphIndex].toPath(
+                val step = morphSequence[currentMorphIndex]
+                step.morph.toPath(
                     progress = progress,
                     path = androidPath
                 )
@@ -191,7 +194,8 @@ fun ExpressiveHeroCenterpiece(
                     path = composePath,
                     size = size,
                     scaleFactor = shapesScaleFactor,
-                    matrix = scaleMatrix
+                    matrix = scaleMatrix,
+                    normalizedCenter = step.centerAt(progress),
                 )
 
                 val currentAngle = (progress * 90f + morphRotationTargetAngle + globalRotation.value) % 360f
@@ -229,7 +233,7 @@ fun ExpressiveHeroCenterpiece(
                         imageVector = targetIcon,
                         contentDescription = null,
                         tint = iconColor,
-                        modifier = Modifier.size(80.dp)
+                        modifier = Modifier.size(heroSize * (80f / 260f))
                     )
                 }
             }

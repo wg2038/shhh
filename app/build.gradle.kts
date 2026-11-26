@@ -19,6 +19,18 @@ if (keystorePropertiesFile.exists()) {
     }
 }
 
+val keystoreStoreFile = keystoreProperties.getProperty("storeFile")?.trim()?.takeIf { it.isNotEmpty() }
+val keystoreStorePassword = keystoreProperties.getProperty("storePassword")?.takeIf { it.isNotEmpty() }
+val keystoreKeyAlias = keystoreProperties.getProperty("keyAlias")?.takeIf { it.isNotEmpty() }
+val keystoreKeyPassword = keystoreProperties.getProperty("keyPassword")?.takeIf { it.isNotEmpty() }
+
+val hasFileReleaseSigning = keystorePropertiesFile.exists() &&
+    keystoreStoreFile != null &&
+    rootProject.file(keystoreStoreFile).exists() &&
+    keystoreStorePassword != null &&
+    keystoreKeyAlias != null &&
+    keystoreKeyPassword != null
+
 val envKeystoreFile = providers.environmentVariable("SHHH_KEYSTORE_FILE").orNull?.takeIf { it.isNotBlank() }
 val envKeystorePassword = providers.environmentVariable("SHHH_KEYSTORE_PASSWORD").orNull?.takeIf { it.isNotBlank() }
 val envKeyAlias = providers.environmentVariable("SHHH_KEY_ALIAS").orNull?.takeIf { it.isNotBlank() }
@@ -30,7 +42,7 @@ val hasEnvReleaseSigning = envKeystoreFile != null &&
     envKeyAlias != null &&
     envKeyPassword != null
 
-val hasReleaseSigning = keystorePropertiesFile.exists() || hasEnvReleaseSigning
+val hasReleaseSigning = hasFileReleaseSigning || hasEnvReleaseSigning
 
 abstract class GitReleaseTagsValueSource : ValueSource<String, GitReleaseTagsValueSource.Parameters> {
     interface Parameters : ValueSourceParameters {
@@ -136,6 +148,13 @@ fun parseReleaseVersionTag(rawTag: String): AppVersionInfo? {
             rawCode
         )
     }
+    if (preRelease.isNotEmpty()) {
+        logger.warn(
+            "Release tag '{}' is a pre-release; versionCode ({}) shares the same numeric code as the final release.",
+            tag,
+            rawCode.coerceAtLeast(1L)
+        )
+    }
 
     return AppVersionInfo(
         code = rawCode.coerceAtLeast(1L).toInt(),
@@ -225,11 +244,11 @@ android {
     // Read release signing config from keystore.properties or environment variables; fall back to debug key.
     signingConfigs {
         create("release") {
-            if (keystorePropertiesFile.exists()) {
-                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
+            if (hasFileReleaseSigning) {
+                storeFile = rootProject.file(keystoreStoreFile!!)
+                storePassword = keystoreStorePassword
+                keyAlias = keystoreKeyAlias
+                keyPassword = keystoreKeyPassword
             } else if (hasEnvReleaseSigning) {
                 storeFile = rootProject.file(envKeystoreFile!!)
                 storePassword = envKeystorePassword
@@ -276,14 +295,11 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
-    implementation("androidx.lifecycle:lifecycle-service:2.8.0")
     implementation("androidx.activity:activity-compose:1.9.2")
 
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.graphics:graphics-shapes:1.0.1")
     implementation("androidx.compose.material3:material3:1.4.0")
     implementation("com.materialkolor:material-kolor:2.0.0")

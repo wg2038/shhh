@@ -119,7 +119,7 @@ class FlipStateMachineTest {
         assertTrue(decision.enterDnd)
 
         // User/system turns DND off while the phone remains face down.
-        decision = machine.onExternalDndDisabled(150L)
+        decision = machine.onExternalDndDisabled()
         assertEquals(FlipStateMachine.Phase.IDLE, decision.phase)
         assertTrue(machine.suppressedUntilLifted)
         assertFalse(decision.enterDnd)
@@ -605,7 +605,7 @@ class FlipStateMachineTest {
         assertEquals(FlipStateMachine.Phase.DOWN_PENDING, decision.phase)
         assertTrue(decision.useFastSensors)
 
-        decision = machine.onExternalDndDisabled(40L)
+        decision = machine.onExternalDndDisabled()
         assertEquals(FlipStateMachine.Phase.IDLE, decision.phase)
         assertEquals(FlipStateMachine.Target.NONE, decision.pendingTarget)
         assertFalse(decision.useFastSensors)
@@ -623,5 +623,96 @@ class FlipStateMachineTest {
         assertFalse(machine.suppressedUntilLifted)
         decision = machine.onObservation(observation(100L))
         assertEquals(FlipStateMachine.Phase.DOWN_PENDING, decision.phase)
+    }
+
+    @Test
+    fun continuousMotionDisturbancesExceedingMaxDownPendingBudgetCoolDown() {
+        val machine = FlipStateMachine(
+            hasGyroscope = true,
+            hasOpticalProximity = false,
+            config = fastConfig.copy(maxDownPendingMs = 300L),
+        )
+
+        machine.onObservation(observation(0L))
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, machine.phase)
+
+        // Disturbances inside the budget keep extending DOWN_PENDING.
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, machine.onMotionDisturbance(100L)!!.phase)
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, machine.onMotionDisturbance(200L)!!.phase)
+
+        // Reaching the max budget trips COOLDOWN instead of draining battery indefinitely.
+        val decision = machine.onMotionDisturbance(300L)!!
+        assertEquals(FlipStateMachine.Phase.COOLDOWN, decision.phase)
+        assertFalse(decision.useFastSensors)
+        assertTrue(decision.releaseWakeLock)
+        assertTrue(decision.cancelScheduledCheck)
+    }
+
+    @Test
+    fun enterDndFailureMovesToCooldownUntilPhoneIsLifted() {
+        val machine = FlipStateMachine(
+            hasGyroscope = true,
+            hasOpticalProximity = false,
+            config = fastConfig,
+        )
+
+        machine.onObservation(observation(0L))
+        val enter = machine.onTimer(100L, stationary())
+        assertTrue(enter.enterDnd)
+
+        val failed = machine.onEnterDndFailed()
+        assertEquals(FlipStateMachine.Phase.COOLDOWN, failed.phase)
+        assertFalse(failed.useFastSensors)
+        assertTrue(failed.releaseWakeLock)
+
+        // Remaining face down must not immediately re-arm a retry loop.
+        val stillDown = machine.onObservation(observation(150L))
+        assertEquals(FlipStateMachine.Phase.COOLDOWN, stillDown.phase)
+        assertFalse(stillDown.useFastSensors)
+        assertNull(stillDown.scheduleCheckAtMs)
+
+        // Lifting the phone resets COOLDOWN back to IDLE.
+        val lifted = machine.onObservation(observation(200L, gravityZ = 9.8f, horizontalGravity = 0.1f))
+        assertEquals(FlipStateMachine.Phase.IDLE, lifted.phase)
+    }
+
+    @Test
+    fun callBecomingActiveDuringDownPendingCancelsCountdown() {
+        val machine = FlipStateMachine(
+            hasGyroscope = true,
+            hasOpticalProximity = false,
+            config = fastConfig,
+        )
+
+        machine.onObservation(observation(0L))
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, machine.phase)
+
+        val decision = machine.onCallActive()!!
+        assertEquals(FlipStateMachine.Phase.IDLE, decision.phase)
+        assertFalse(decision.useFastSensors)
+        assertTrue(decision.releaseWakeLock)
+        assertTrue(decision.cancelScheduledCheck)
+        assertTrue(decision.resetStillness)
+    }
+
+    @Test
+    fun nonFiniteOrientationValuesAreIgnoredSafely() {
+        val machine = FlipStateMachine(
+            hasGyroscope = true,
+            hasOpticalProximity = false,
+            config = fastConfig,
+        )
+
+        machine.onObservation(observation(0L))
+        machine.onTimer(100L, stationary())
+        assertEquals(FlipStateMachine.Phase.FLIPPED, machine.phase)
+
+        val nanDecision = machine.onObservation(observation(120L, gravityZ = Float.NaN))
+        assertEquals(FlipStateMachine.Phase.FLIPPED, nanDecision.phase)
+        assertEquals(FlipStateMachine.Target.NONE, nanDecision.pendingTarget)
+
+        val infDecision = machine.onObservation(observation(140L, horizontalGravity = Float.POSITIVE_INFINITY))
+        assertEquals(FlipStateMachine.Phase.FLIPPED, infDecision.phase)
+        assertEquals(FlipStateMachine.Target.NONE, infDecision.pendingTarget)
     }
 }

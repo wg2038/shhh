@@ -7,6 +7,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -139,20 +140,25 @@ fun HomeScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier
     ) { innerPadding ->
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 24.dp)
         ) {
+            val compactLayout = maxHeight < 520.dp
+            val heroSize = if (compactLayout) 200.dp else 260.dp
+            val heroOffset = if (compactLayout) (-36).dp else (-8).dp
+
             ExpressiveHeroCenterpiece(
                 isRunning = isEffectiveRunning,
                 isFlippedDown = isFlippedDown,
                 isDndActive = isDndActive,
                 onToggle = onToggleService,
+                heroSize = heroSize,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .offset(y = (-8).dp)
+                    .offset(y = heroOffset)
             )
 
             ExpressiveFloatingToolbar(
@@ -166,7 +172,10 @@ fun HomeScreen(
                     if (showToolbarHint) onDismissToolbarHint()
                     onToggleAutoLock(it)
                 },
-                onOpenAbout = { showAboutDialog = true },
+                onOpenAbout = {
+                    if (showToolbarHint) onDismissToolbarHint()
+                    showAboutDialog = true
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()

@@ -181,4 +181,47 @@ class StillnessDetectorTest {
         assertTrue("accel-only shake must exceed the tighter threshold", result.accelVariance > 0.0010f)
         assertFalse("handheld shake must be rejected without a gyroscope", result.isStationary)
     }
+
+    @Test
+    fun batchedZeroSpanSamplesAreRejected() {
+        val detector = StillnessDetector(hasGyroscope = true)
+        detector.reset(0L)
+
+        // All samples arrive with identical post-warmup timestamp (e.g. FIFO flush).
+        repeat(25) {
+            detector.addAccelerometer(0f, 0f, -9.806f, 350L)
+            detector.addGyroscope(0f, 0f, 0f, 350L)
+        }
+
+        val result = detector.result(nowMs = 400L)
+        assertFalse("zero time-span burst must not count as stationary", result.isStationary)
+    }
+
+    @Test
+    fun staleSamplesBeyondMaxAgeAreRejected() {
+        val detector = StillnessDetector(hasGyroscope = true)
+        feedTable(detector, samples = 50, startMs = 0L, periodMs = 20L)
+
+        // Last sample was at 980ms; evaluating at 2000ms (> 600ms stale) must fail.
+        val stale = detector.result(nowMs = 2_000L)
+        assertFalse("stale sensor buffer must not pass stillness", stale.isStationary)
+    }
+
+    @Test
+    fun desynchronizedAccelAndGyroWindowsAreRejected() {
+        val detector = StillnessDetector(hasGyroscope = true)
+        detector.reset(0L)
+
+        for (i in 0 until 100) {
+            val t = i * period50Hz
+            detector.addAccelerometer(0f, 0f, -9.806f, t)
+            if (t <= 900L) {
+                detector.addGyroscope(0f, 0f, 0f, t)
+            }
+        }
+
+        // Accel is at 1980ms, gyro stalled at 900ms (skew > 500ms).
+        val result = detector.result(nowMs = 1_980L)
+        assertFalse("desynchronized gyro stream must not pass stillness", result.isStationary)
+    }
 }

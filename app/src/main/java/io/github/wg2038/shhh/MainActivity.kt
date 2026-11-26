@@ -3,10 +3,12 @@ package io.github.wg2038.shhh
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -33,15 +35,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import io.github.wg2038.shhh.ui.screens.HomeScreen
 import io.github.wg2038.shhh.ui.screens.OnboardingScreen
 import io.github.wg2038.shhh.ui.theme.ExpressiveMotionTokens
 import io.github.wg2038.shhh.ui.theme.ExpressiveShapeTokens
 import io.github.wg2038.shhh.ui.theme.ExpressiveTypographyTokens
 import io.github.wg2038.shhh.ui.theme.ShhhTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -58,6 +60,7 @@ class MainActivity : ComponentActivity() {
             }
 
             var resumeTrigger by remember { mutableIntStateOf(0) }
+            var permissionSyncSeq by remember { mutableIntStateOf(0) }
 
             ShhhTheme(updateKey = resumeTrigger) {
                 var onboardingComplete by remember {
@@ -78,15 +81,14 @@ class MainActivity : ComponentActivity() {
                         hasAccessibilityPermission = access
 
                         if (prefs.getBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)) {
-                            prefs.edit()
-                                .apply {
-                                    if (access) {
-                                        putBoolean(PrefsKeys.KEY_AUTO_LOCK_SCREEN, true)
-                                    }
-                                    putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)
+                            prefs.edit {
+                                if (access) {
+                                    putBoolean(PrefsKeys.KEY_AUTO_LOCK_SCREEN, true)
                                 }
-                                .apply()
+                                putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)
+                            }
                         }
+                        permissionSyncSeq++
                     }
                 }
 
@@ -96,6 +98,9 @@ class MainActivity : ComponentActivity() {
                             resumeTrigger++
                             coroutineScope.launch {
                                 refreshPermissions()
+                                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                                    return@launch
+                                }
                                 val dndGranted = hasDndPermission
                                 val isUserEnabled = prefs.getBoolean(PrefsKeys.KEY_SERVICE_USER_ENABLED, true)
                                 if (onboardingComplete && isUserEnabled && dndGranted && !ShhhService.isRunning.value) {
@@ -124,10 +129,10 @@ class MainActivity : ComponentActivity() {
                             onGrantDnd = { openDndPermissionSettings(context) },
                             onRequestBatteryOptimization = { requestIgnoreBatteryOptimization(context) },
                             onComplete = {
-                                prefs.edit()
-                                    .putBoolean(PrefsKeys.KEY_ONBOARDING_COMPLETE, true)
-                                    .putBoolean(PrefsKeys.KEY_SERVICE_USER_ENABLED, true)
-                                    .apply()
+                                prefs.edit {
+                                    putBoolean(PrefsKeys.KEY_ONBOARDING_COMPLETE, true)
+                                    putBoolean(PrefsKeys.KEY_SERVICE_USER_ENABLED, true)
+                                }
                                 onboardingComplete = true
 
                                 if (checkDndPermission(context) && !ShhhService.isRunning.value) {
@@ -139,6 +144,7 @@ class MainActivity : ComponentActivity() {
                         MainAppContent(
                             hasDndPermission = hasDndPermission,
                             hasAccessibilityPermission = hasAccessibilityPermission,
+                            permissionSyncSeq = permissionSyncSeq,
                             onOpenDndSettings = { openDndPermissionSettings(context) },
                             onOpenAccessibilitySettings = { openAccessibilitySettings(context) }
                         )
@@ -153,6 +159,7 @@ class MainActivity : ComponentActivity() {
 private fun MainAppContent(
     hasDndPermission: Boolean,
     hasAccessibilityPermission: Boolean,
+    permissionSyncSeq: Int,
     onOpenDndSettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit
 ) {
@@ -170,7 +177,8 @@ private fun MainAppContent(
         mutableStateOf(!prefs.getBoolean(PrefsKeys.KEY_TOOLBAR_HINT_SEEN, false))
     }
 
-    LaunchedEffect(hasAccessibilityPermission) {
+    LaunchedEffect(hasAccessibilityPermission, permissionSyncSeq) {
+        autoStartEnabled = prefs.getBoolean(PrefsKeys.KEY_AUTO_START_BOOT, true)
         autoLockPref = prefs.getBoolean(PrefsKeys.KEY_AUTO_LOCK_SCREEN, false)
     }
 
@@ -229,47 +237,51 @@ private fun MainAppContent(
                 if (!hasDndPermission) {
                     showPermissionDialog = true
                 } else {
-                    prefs.edit().putBoolean(PrefsKeys.KEY_SERVICE_USER_ENABLED, true).apply()
+                    prefs.edit { putBoolean(PrefsKeys.KEY_SERVICE_USER_ENABLED, true) }
                     startShhhService(context)
                 }
             } else {
-                prefs.edit().putBoolean(PrefsKeys.KEY_SERVICE_USER_ENABLED, false).apply()
+                prefs.edit { putBoolean(PrefsKeys.KEY_SERVICE_USER_ENABLED, false) }
                 stopShhhService(context)
             }
         },
         onToggleAutoStart = { enabled ->
             autoStartEnabled = enabled
-            prefs.edit().putBoolean(PrefsKeys.KEY_AUTO_START_BOOT, enabled).apply()
+            prefs.edit { putBoolean(PrefsKeys.KEY_AUTO_START_BOOT, enabled) }
         },
         onToggleAutoLock = { wantEnabled ->
             if (wantEnabled) {
                 if (hasAccessibilityPermission) {
                     autoLockPref = true
-                    prefs.edit()
-                        .putBoolean(PrefsKeys.KEY_AUTO_LOCK_SCREEN, true)
-                        .putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)
-                        .apply()
+                    prefs.edit {
+                        putBoolean(PrefsKeys.KEY_AUTO_LOCK_SCREEN, true)
+                        putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)
+                    }
                 } else {
-                    prefs.edit().putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, true).apply()
+                    prefs.edit { putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, true) }
                     onOpenAccessibilitySettings()
                 }
             } else {
                 autoLockPref = false
-                prefs.edit()
-                    .putBoolean(PrefsKeys.KEY_AUTO_LOCK_SCREEN, false)
-                    .putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)
-                    .apply()
+                prefs.edit {
+                    putBoolean(PrefsKeys.KEY_AUTO_LOCK_SCREEN, false)
+                    putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)
+                }
             }
         },
         onDismissToolbarHint = {
             showToolbarHint = false
-            prefs.edit().putBoolean(PrefsKeys.KEY_TOOLBAR_HINT_SEEN, true).apply()
+            prefs.edit { putBoolean(PrefsKeys.KEY_TOOLBAR_HINT_SEEN, true) }
         }
     )
 }
 
 private fun startShhhService(context: Context) {
-    context.startForegroundService(Intent(context, ShhhService::class.java))
+    try {
+        context.startForegroundService(Intent(context, ShhhService::class.java))
+    } catch (e: Exception) {
+        Log.w("MainActivity", "Failed to start ShhhService", e)
+    }
 }
 
 private fun stopShhhService(context: Context) {
@@ -299,7 +311,7 @@ private fun requestIgnoreBatteryOptimization(context: Context) {
     if (!pm.isIgnoringBatteryOptimizations(context.packageName)) {
         try {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:${context.packageName}")
+                data = "package:${context.packageName}".toUri()
             }
             context.startActivity(intent)
             return
@@ -326,7 +338,7 @@ private fun openAccessibilitySettings(context: Context) {
 private fun openAppDetailsSettings(context: Context): Boolean {
     return try {
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:${context.packageName}")
+            data = "package:${context.packageName}".toUri()
         }
         context.startActivity(intent)
         true

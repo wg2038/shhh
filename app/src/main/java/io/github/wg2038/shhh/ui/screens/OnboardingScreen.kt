@@ -55,7 +55,6 @@ fun OnboardingScreen(
 ) {
     val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
-    val allGranted = hasDndPermission
 
     Column(
         modifier = modifier
@@ -84,7 +83,6 @@ fun OnboardingScreen(
                     isIgnoringBatteryOptimization = isIgnoringBatteryOptimization,
                     onGrantDnd = onGrantDnd,
                     onRequestBatteryOptimization = onRequestBatteryOptimization,
-                    allGranted = allGranted,
                     onComplete = onComplete
                 )
             }
@@ -187,7 +185,6 @@ private fun OnboardingPermissionsPage(
     isIgnoringBatteryOptimization: Boolean,
     onGrantDnd: () -> Unit,
     onRequestBatteryOptimization: () -> Unit,
-    allGranted: Boolean,
     onComplete: () -> Unit
 ) {
     Column(
@@ -230,7 +227,7 @@ private fun OnboardingPermissionsPage(
 
         Button(
             onClick = onComplete,
-            enabled = allGranted,
+            enabled = hasDndPermission,
             shape = ExpressiveShapeTokens.Full,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -285,13 +282,12 @@ private fun OnboardingPermissionItem(
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = ExpressiveTypographyTokens.ItemTitle,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
+        Text(
+            text = title,
+            style = ExpressiveTypographyTokens.ItemTitle,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
 
         Spacer(modifier = Modifier.width(10.dp))
 

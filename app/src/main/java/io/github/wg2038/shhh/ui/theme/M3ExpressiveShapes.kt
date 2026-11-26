@@ -4,15 +4,14 @@ import android.graphics.Matrix as AndroidMatrix
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.center
+import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asComposePath
 import androidx.graphics.shapes.CornerRounding
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.graphics.shapes.circle
 import androidx.graphics.shapes.star
-import androidx.graphics.shapes.toPath
 import androidx.graphics.shapes.transformed
 import kotlin.math.PI
 import kotlin.math.atan2
@@ -25,6 +24,7 @@ object M3ExpressiveShapes {
 
     private val cornerRound15 = CornerRounding(radius = 0.15f)
     private val cornerRound50 = CornerRounding(radius = 0.5f)
+    private val defaultPolygonCenter = Offset(0.5f, 0.5f)
 
     private fun rotateMatrix(degrees: Float): AndroidMatrix =
         AndroidMatrix().apply { preRotate(degrees) }
@@ -109,10 +109,24 @@ object M3ExpressiveShapes {
         )
     }
 
-    fun buildMorphSequence(): List<Morph> {
+    data class MorphStep(
+        val morph: Morph,
+        val startCenter: Offset,
+        val endCenter: Offset,
+    ) {
+        fun centerAt(progress: Float): Offset = lerp(startCenter, endCenter, progress)
+    }
+
+    fun buildMorphSequence(): List<MorphStep> {
         val list = sequence
         return List(list.size) { i ->
-            Morph(list[i], list[(i + 1) % list.size])
+            val start = list[i]
+            val end = list[(i + 1) % list.size]
+            MorphStep(
+                morph = Morph(start, end),
+                startCenter = Offset(start.centerX, start.centerY),
+                endCenter = Offset(end.centerX, end.centerY),
+            )
         }
     }
 
@@ -134,14 +148,20 @@ object M3ExpressiveShapes {
         path: Path,
         size: Size,
         scaleFactor: Float,
-        matrix: Matrix
+        matrix: Matrix,
+        normalizedCenter: Offset? = null,
     ): Path {
+        val scaleX = size.width * scaleFactor
+        val scaleY = size.height * scaleFactor
         matrix.reset()
-        matrix.scale(size.width * scaleFactor, size.height * scaleFactor)
+        matrix.scale(scaleX, scaleY)
         path.transform(matrix)
-        val pathBounds = path.getBounds()
-        val centerOffset = size.center - pathBounds.center
-        path.translate(centerOffset)
+        val pivot = if (normalizedCenter != null) {
+            Offset(normalizedCenter.x * scaleX, normalizedCenter.y * scaleY)
+        } else {
+            path.getBounds().center
+        }
+        path.translate(size.center - pivot)
         return path
     }
 
@@ -156,9 +176,9 @@ object M3ExpressiveShapes {
     private fun customPolygon(
         pnr: List<PointNRound>,
         reps: Int,
-        center: Offset = Offset(0.5f, 0.5f),
         mirroring: Boolean = false
     ): RoundedPolygon {
+        val center = defaultPolygonCenter
         val actualPoints = doRepeat(pnr, reps, center, mirroring)
         return RoundedPolygon(
             vertices = FloatArray(actualPoints.size * 2) { ix ->
@@ -204,7 +224,7 @@ object M3ExpressiveShapes {
             }
         }
 
-    private fun Offset.rotateDegrees(angle: Float, center: Offset = Offset.Zero): Offset {
+    private fun Offset.rotateDegrees(angle: Float, center: Offset): Offset {
         val a = angle.toRadians()
         val off = this - center
         return Offset(off.x * cos(a) - off.y * sin(a), off.x * sin(a) + off.y * cos(a)) + center
