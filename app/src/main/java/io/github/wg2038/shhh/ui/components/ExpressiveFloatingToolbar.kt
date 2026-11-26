@@ -2,8 +2,11 @@ package io.github.wg2038.shhh.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -17,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,56 +89,25 @@ private fun ToolbarIconToggle(
     onToggle: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
 
-    val cornerRadius by animateDpAsState(
-        targetValue = if (checked) 24.dp else 14.dp,
-        animationSpec = ExpressiveMotionTokens.fastSpatial(),
-        label = "toolbarToggleCorner"
-    )
-
-    val containerColor by animateColorAsState(
-        targetValue = if (checked) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            Color.Transparent
-        },
-        animationSpec = ExpressiveMotionTokens.fastEffects(),
-        label = "toolbarToggleBg"
-    )
-
-    val contentColor by animateColorAsState(
-        targetValue = if (checked) {
-            MaterialTheme.colorScheme.onSecondaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        animationSpec = ExpressiveMotionTokens.fastEffects(),
-        label = "toolbarToggleContent"
-    )
-
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(cornerRadius))
-            .background(containerColor)
-            .semantics { contentDescription = description }
-            .toggleable(
-                value = checked,
-                role = Role.Switch,
-                onValueChange = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onToggle()
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = contentColor,
-            modifier = Modifier.size(22.dp)
+    ToolbarIconSurface(
+        icon = icon,
+        description = description,
+        selected = checked,
+        isPressed = isPressed,
+        interactionModifier = Modifier.toggleable(
+            value = checked,
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            role = Role.Switch,
+            onValueChange = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onToggle()
+            }
         )
-    }
+    )
 }
 
 @Composable
@@ -144,22 +117,80 @@ private fun ToolbarIconAction(
     onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    ToolbarIconSurface(
+        icon = icon,
+        description = description,
+        selected = false,
+        isPressed = isPressed,
+        interactionModifier = Modifier.clickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            role = Role.Button,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            }
+        )
+    )
+}
+
+@Composable
+private fun ToolbarIconSurface(
+    icon: ImageVector,
+    description: String,
+    selected: Boolean,
+    isPressed: Boolean,
+    interactionModifier: Modifier
+) {
+    // Follow M3 Expressive round icon toggle tokens: circle at rest when unselected,
+    // squircle when pressed, and rounded-square container when selected.
+    val targetCorner = when {
+        isPressed -> 10.dp
+        selected -> 14.dp
+        else -> 24.dp
+    }
+    val cornerRadius by animateDpAsState(
+        targetValue = targetCorner,
+        animationSpec = ExpressiveMotionTokens.fastSpatial(),
+        label = "toolbarIconCorner"
+    )
+
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            Color.Transparent
+        },
+        animationSpec = ExpressiveMotionTokens.fastEffects(),
+        label = "toolbarIconBg"
+    )
+
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = ExpressiveMotionTokens.fastEffects(),
+        label = "toolbarIconContent"
+    )
 
     Box(
         modifier = Modifier
             .size(48.dp)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(cornerRadius.coerceAtLeast(0.dp)))
+            .background(containerColor)
             .semantics { contentDescription = description }
-            .clickable(role = Role.Button) {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onClick()
-            },
+            .then(interactionModifier),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = contentColor,
             modifier = Modifier.size(22.dp)
         )
     }
