@@ -514,6 +514,7 @@ class ShhhService : Service(), SensorEventListener {
                     registeredFastGyro = registerSensorWithFallback(gyro, SensorManager.SENSOR_DELAY_GAME, 0)
                     if (!registeredFastGyro) {
                         Log.w(TAG, "Failed to register gyroscope listener; falling back to accel-only stillness.")
+                        gyroscopeSensor = null
                         stillnessDetector = StillnessDetector(
                             hasGyroscope = false,
                             hasAccelerometer = accelerometerSensor != null,

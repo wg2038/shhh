@@ -145,15 +145,10 @@ private fun ToolbarIconSurface(
     isPressed: Boolean,
     interactionModifier: Modifier
 ) {
-    // Follow M3 Expressive round icon toggle tokens: circle at rest when unselected,
-    // squircle when pressed, and rounded-square container when selected.
-    val targetCorner = when {
-        isPressed -> 10.dp
-        selected -> 14.dp
-        else -> 24.dp
-    }
+    // Keep resting state concentric (CircleShape) inside the pill toolbar,
+    // and apply M3 Expressive squircle shape morphing only while pressed.
     val cornerRadius by animateDpAsState(
-        targetValue = targetCorner,
+        targetValue = if (isPressed) 12.dp else 24.dp,
         animationSpec = ExpressiveMotionTokens.fastSpatial(),
         label = "toolbarIconCorner"
     )

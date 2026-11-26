@@ -224,4 +224,16 @@ class StillnessDetectorTest {
         val result = detector.result(nowMs = 1_980L)
         assertFalse("desynchronized gyro stream must not pass stillness", result.isStationary)
     }
+
+    @Test
+    fun nonFiniteSamplesAreIgnoredWithoutPoisoningWindow() {
+        val detector = StillnessDetector(hasGyroscope = true)
+        feedTable(detector)
+
+        detector.addAccelerometer(Float.NaN, 0f, -9.806f, 4_000L)
+        detector.addGyroscope(0f, Float.POSITIVE_INFINITY, 0f, 4_000L)
+
+        val result = detector.result(nowMs = 3_000L)
+        assertTrue("stray non-finite samples must not poison valid window", result.isStationary)
+    }
 }

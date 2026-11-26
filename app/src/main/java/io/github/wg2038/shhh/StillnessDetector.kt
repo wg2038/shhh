@@ -112,12 +112,14 @@ class StillnessDetector(
 
     fun addAccelerometer(x: Float, y: Float, z: Float, timestampMs: Long) {
         if (!hasAccelerometer) return
+        if (!x.isFinite() || !y.isFinite() || !z.isFinite()) return
         if (!acceptTimestamp(timestampMs, accelBuffer.lastSampleMs)) return
         accelBuffer.add(x, y, z, timestampMs)
     }
 
     fun addGyroscope(x: Float, y: Float, z: Float, timestampMs: Long) {
         if (!hasGyroscope) return
+        if (!x.isFinite() || !y.isFinite() || !z.isFinite()) return
         if (!acceptTimestamp(timestampMs, gyroBuffer.lastSampleMs)) return
         gyroBuffer.add(x, y, z, timestampMs)
     }
