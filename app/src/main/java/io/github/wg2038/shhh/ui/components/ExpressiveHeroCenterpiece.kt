@@ -106,8 +106,8 @@ fun ExpressiveHeroCenterpiece(
                         animationSpec = morphSpec
                     )
                     if (result.endReason == AnimationEndReason.Finished) {
-                        currentMorphIndex = (currentMorphIndex + 1) % morphSequence.size
                         morphProgress.snapTo(0f)
+                        currentMorphIndex = (currentMorphIndex + 1) % morphSequence.size
                         morphRotationTargetAngle = (morphRotationTargetAngle + 90f) % 360f
                     }
                 }

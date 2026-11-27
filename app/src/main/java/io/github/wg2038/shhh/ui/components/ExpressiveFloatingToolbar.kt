@@ -97,7 +97,7 @@ private fun ToolbarIconToggle(
         description = description,
         selected = checked,
         isPressed = isPressed,
-        interactionModifier = Modifier.toggleable(
+        modifier = Modifier.toggleable(
             value = checked,
             interactionSource = interactionSource,
             indication = LocalIndication.current,
@@ -125,7 +125,7 @@ private fun ToolbarIconAction(
         description = description,
         selected = false,
         isPressed = isPressed,
-        interactionModifier = Modifier.clickable(
+        modifier = Modifier.clickable(
             interactionSource = interactionSource,
             indication = LocalIndication.current,
             role = Role.Button,
@@ -143,7 +143,7 @@ private fun ToolbarIconSurface(
     description: String,
     selected: Boolean,
     isPressed: Boolean,
-    interactionModifier: Modifier
+    modifier: Modifier = Modifier
 ) {
     // Keep resting state concentric (CircleShape) inside the pill toolbar,
     // and apply M3 Expressive squircle shape morphing only while pressed.
@@ -179,7 +179,7 @@ private fun ToolbarIconSurface(
             .clip(RoundedCornerShape(cornerRadius.coerceAtLeast(0.dp)))
             .background(containerColor)
             .semantics { contentDescription = description }
-            .then(interactionModifier),
+            .then(modifier),
         contentAlignment = Alignment.Center
     ) {
         Icon(

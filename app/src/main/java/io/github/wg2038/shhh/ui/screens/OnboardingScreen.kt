@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -237,7 +238,7 @@ private fun OnboardingPermissionsPage(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
+                .heightIn(min = 54.dp)
         ) {
             Text(
                 text = stringResource(R.string.onboarding_start_btn),
@@ -259,10 +260,10 @@ private fun OnboardingPermissionItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(72.dp)
+            .heightIn(min = 72.dp)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -315,7 +316,7 @@ private fun OnboardingPermissionItem(
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                modifier = Modifier.height(38.dp)
+                modifier = Modifier.heightIn(min = 38.dp)
             ) {
                 Text(
                     text = grantLabel,

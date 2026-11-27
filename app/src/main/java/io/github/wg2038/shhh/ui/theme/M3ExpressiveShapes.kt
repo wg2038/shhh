@@ -149,18 +149,14 @@ object M3ExpressiveShapes {
         size: Size,
         scaleFactor: Float,
         matrix: Matrix,
-        normalizedCenter: Offset? = null,
+        normalizedCenter: Offset,
     ): Path {
         val scaleX = size.width * scaleFactor
         val scaleY = size.height * scaleFactor
         matrix.reset()
         matrix.scale(scaleX, scaleY)
         path.transform(matrix)
-        val pivot = if (normalizedCenter != null) {
-            Offset(normalizedCenter.x * scaleX, normalizedCenter.y * scaleY)
-        } else {
-            path.getBounds().center
-        }
+        val pivot = Offset(normalizedCenter.x * scaleX, normalizedCenter.y * scaleY)
         path.translate(size.center - pivot)
         return path
     }

@@ -15,7 +15,12 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
@@ -26,10 +31,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 @Composable
-fun SystemBarsColorEffect(darkTheme: Boolean) {
+private fun SystemBarsColorEffect(darkTheme: Boolean) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -60,12 +67,12 @@ private fun applySystemBarAppearance(context: Context, darkTheme: Boolean) {
 object MonetThemeResolver {
     private const val TAG = "MonetThemeResolver"
 
-    val isPixel: Boolean by lazy {
+    private val isPixel: Boolean by lazy {
         Build.MANUFACTURER.equals("google", ignoreCase = true) ||
             Build.BRAND.equals("google", ignoreCase = true)
     }
 
-    val isSamsung: Boolean by lazy {
+    private val isSamsung: Boolean by lazy {
         Build.MANUFACTURER.equals("samsung", ignoreCase = true)
     }
 
@@ -321,8 +328,22 @@ fun ShhhTheme(
     val context = LocalContext.current
     val darkTheme = isSystemInDarkTheme()
 
-    val colorScheme = remember(darkTheme, updateKey) {
-        MonetThemeResolver.resolveColorScheme(context, darkTheme)
+    var colorScheme by remember {
+        mutableStateOf(MonetThemeResolver.resolveColorScheme(context, darkTheme))
+    }
+    var lastResolvedKey by remember { mutableIntStateOf(updateKey) }
+    var lastResolvedDark by remember { mutableStateOf(darkTheme) }
+
+    LaunchedEffect(darkTheme, updateKey) {
+        if (lastResolvedKey == updateKey && lastResolvedDark == darkTheme) {
+            return@LaunchedEffect
+        }
+        val resolved = withContext(Dispatchers.IO) {
+            MonetThemeResolver.resolveColorScheme(context, darkTheme)
+        }
+        colorScheme = resolved
+        lastResolvedKey = updateKey
+        lastResolvedDark = darkTheme
     }
 
     SystemBarsColorEffect(darkTheme = darkTheme)

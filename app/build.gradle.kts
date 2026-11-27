@@ -235,7 +235,7 @@ android {
     lint {
         checkReleaseBuilds = false
         abortOnError = true
-        // Work around lifecycle 2.8.0 / Compose 1.7 lint detector crashes under Kotlin 2.0.
+        // Work around AGP 8.7.3 Lint Kotlin Analysis API incompatibility with lifecycle 2.9 / Compose runtime 1.9 detectors.
         disable += setOf(
             "AutoboxingStateCreation",
             "FrequentlyChangingValue",
@@ -264,6 +264,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             if (requireReleaseSigning && !hasReleaseSigning) {
                 throw GradleException(
                     "Release signing is required (SHHH_REQUIRE_RELEASE_SIGNING=true), but no valid keystore was configured."
@@ -302,12 +303,11 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
-    implementation("androidx.activity:activity-compose:1.9.2")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
+    implementation("androidx.activity:activity-compose:1.9.3")
 
-    implementation(platform("androidx.compose:compose-bom:2024.09.00"))
-    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui:1.8.2")
     implementation("androidx.graphics:graphics-shapes:1.0.1")
     implementation("androidx.compose.material3:material3:1.4.0")
     implementation("com.materialkolor:material-kolor:2.0.0")

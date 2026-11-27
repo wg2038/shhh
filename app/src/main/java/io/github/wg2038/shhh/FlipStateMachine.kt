@@ -32,7 +32,7 @@ class FlipStateMachine(
         COOLDOWN,
     }
 
-    enum class Target { NONE, DOWN, UP }
+    enum class Target { NONE, UP }
 
     sealed interface Proximity {
         data object NoOpticalSensor : Proximity
@@ -76,11 +76,13 @@ class FlipStateMachine(
     var suppressedUntilLifted: Boolean = false
         private set
 
-    private val downDebounceMs =
-        if (hasGyroscope) config.downDebounceMs else config.downDebounceNoGyroMs
+    private var hasGyroscopeState: Boolean = hasGyroscope
 
-    private val maxDownPendingMs =
-        config.maxDownPendingMs ?: (downDebounceMs * (config.maxStillnessRetries + 2).coerceAtLeast(1))
+    private val downDebounceMs: Long
+        get() = if (hasGyroscopeState) config.downDebounceMs else config.downDebounceNoGyroMs
+
+    private val maxDownPendingMs: Long
+        get() = config.maxDownPendingMs ?: (downDebounceMs * (config.maxStillnessRetries + 2).coerceAtLeast(1))
 
     private var deadlineMs = 0L
     private var downPendingStartMs = 0L
@@ -132,7 +134,7 @@ class FlipStateMachine(
                 }
 
                 phase = Phase.DOWN_PENDING
-                pendingTarget = Target.DOWN
+                pendingTarget = Target.NONE
                 stillnessRetryCount = 0
                 lastProximity = observation.proximity
                 lastTiltExit = false
@@ -297,6 +299,19 @@ class FlipStateMachine(
             releaseWakeLock = true,
             cancelScheduledCheck = true,
         )
+    }
+
+    /**
+     * Switches to no-gyroscope debounce timing if gyroscope registration fails at runtime.
+     * Returns the extended deadline when in [Phase.DOWN_PENDING], or null otherwise.
+     */
+    fun disableGyroscope(timestampMs: Long): Long? {
+        if (!hasGyroscopeState) return null
+        hasGyroscopeState = false
+        if (phase != Phase.DOWN_PENDING) return null
+        val extendedDeadline = maxOf(deadlineMs, timestampMs + downDebounceMs)
+        deadlineMs = extendedDeadline
+        return extendedDeadline
     }
 
     private fun enterCooldown(blockedByProximity: Boolean): Decision {

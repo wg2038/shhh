@@ -79,6 +79,8 @@ class ShhhService : Service(), SensorEventListener {
     @Volatile
     private var lastStartId: Int = 0
 
+    private val lifecycleLock = Any()
+
     private enum class SensorMode {
         STOPPED,
         IDLE_LISTENING,
@@ -316,7 +318,6 @@ class ShhhService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        lastStartId = startId
         val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         } else {
@@ -324,16 +325,19 @@ class ShhhService : Service(), SensorEventListener {
         }
         startForeground(NOTIFICATION_ID, buildNotification(active = _isDndActive.value), fgsType)
 
-        if (!notifManager.isNotificationPolicyAccessGranted) {
-            _isRunning.value = false
-            stopSelf(startId)
-            return START_NOT_STICKY
-        }
+        synchronized(lifecycleLock) {
+            lastStartId = startId
+            if (!notifManager.isNotificationPolicyAccessGranted) {
+                _isRunning.value = false
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
 
-        if (!_isRunning.value || sensorMode == SensorMode.STOPPED) {
-            _isRunning.value = true
-            sensorHandler.removeCallbacksAndMessages(null)
-            sensorHandler.post { startDetection() }
+            if (!_isRunning.value || sensorMode == SensorMode.STOPPED) {
+                _isRunning.value = true
+                sensorHandler.removeCallbacksAndMessages(null)
+                sensorHandler.post { startDetection() }
+            }
         }
         return START_STICKY
     }
@@ -440,9 +444,6 @@ class ShhhService : Service(), SensorEventListener {
                     wantFastAccel = false
                     wantFastGyro = false
                     wantProximity = false
-                    // Keep proximity off while idle to avoid under-display IR blinking and wake-ups.
-                    hasProximitySample = false
-                    isProximityNear = false
                 }
 
                 SensorMode.FAST_SAMPLING -> {
@@ -514,12 +515,19 @@ class ShhhService : Service(), SensorEventListener {
                     registeredFastGyro = registerSensorWithFallback(gyro, SensorManager.SENSOR_DELAY_GAME, 0)
                     if (!registeredFastGyro) {
                         Log.w(TAG, "Failed to register gyroscope listener; falling back to accel-only stillness.")
+                        val now = SystemClock.elapsedRealtime()
                         gyroscopeSensor = null
                         stillnessDetector = StillnessDetector(
                             hasGyroscope = false,
                             hasAccelerometer = accelerometerSensor != null,
                         )
-                        stillnessDetector.reset(SystemClock.elapsedRealtime())
+                        stillnessDetector.reset(now)
+                        flipStateMachine.disableGyroscope(now)?.let { newDeadline ->
+                            val delay = (newDeadline - now).coerceAtLeast(0L)
+                            acquireWakeLock(delay + FlipStateMachine.WAKE_LOCK_MARGIN_MS)
+                            sensorHandler.removeCallbacks(debounceRunnable)
+                            sensorHandler.postDelayed(debounceRunnable, delay)
+                        }
                     }
                 }
             }
@@ -580,7 +588,9 @@ class ShhhService : Service(), SensorEventListener {
 
         when (event.sensor.type) {
             Sensor.TYPE_PROXIMITY -> {
+                if (event.values.isEmpty()) return
                 val distance = event.values[0]
+                if (!distance.isFinite()) return
                 val maxRange = proximitySensor?.maximumRange?.takeIf { it > 0f } ?: 5.0f
                 hasProximitySample = true
                 isProximityNear = if (maxRange <= 4.0f) distance < maxRange else distance <= 4.0f
@@ -594,9 +604,14 @@ class ShhhService : Service(), SensorEventListener {
             }
 
             Sensor.TYPE_GYROSCOPE -> {
+                if (event.values.size < 3) return
                 val gx = event.values[0]
                 val gy = event.values[1]
                 val gz = event.values[2]
+                if (!gx.isFinite() || !gy.isFinite() || !gz.isFinite()) {
+                    consecutiveGyroDisturbances = 0
+                    return
+                }
 
                 if (flipStateMachine.phase == FlipStateMachine.Phase.DOWN_PENDING &&
                     stillnessDetector.isWarmedUp(sampleTimeMs)
@@ -618,6 +633,7 @@ class ShhhService : Service(), SensorEventListener {
             }
 
             Sensor.TYPE_ACCELEROMETER -> {
+                if (event.values.size < 3) return
                 val ax = event.values[0]
                 val ay = event.values[1]
                 val az = event.values[2]
@@ -628,6 +644,7 @@ class ShhhService : Service(), SensorEventListener {
             }
 
             Sensor.TYPE_GRAVITY -> {
+                if (event.values.size < 3) return
                 if (activeOrientationSensor?.type == Sensor.TYPE_GRAVITY) {
                     updateOrientation(event.values[0], event.values[1], event.values[2], now)
                 }
@@ -748,6 +765,14 @@ class ShhhService : Service(), SensorEventListener {
     }
 
     private fun stopServiceDueToMissingDndPermission() {
+        val stopTargetId = synchronized(lifecycleLock) {
+            if (shuttingDown || notifManager.isNotificationPolicyAccessGranted) {
+                return
+            }
+            _isRunning.value = false
+            sensorMode = SensorMode.STOPPED
+            lastStartId
+        }
         synchronized(dndLock) {
             _isDndActive.value = false
             _isFlippedDown.value = false
@@ -764,8 +789,16 @@ class ShhhService : Service(), SensorEventListener {
         flipStateMachine.reset(startFlipped = false)
         applySensorMode(SensorMode.STOPPED, force = true)
         releaseWakeLock()
-        _isRunning.value = false
-        stopSelf(lastStartId)
+
+        val shouldStop = synchronized(lifecycleLock) {
+            !shuttingDown &&
+                !_isRunning.value &&
+                lastStartId == stopTargetId &&
+                !notifManager.isNotificationPolicyAccessGranted
+        }
+        if (shouldStop) {
+            stopSelf(stopTargetId)
+        }
     }
 
     private enum class EnableDndResult {
@@ -841,11 +874,11 @@ class ShhhService : Service(), SensorEventListener {
             }
             if (turnedOff) {
                 updateNotification(active = false)
+                triggerFlipUpHaptic()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error disabling DND", e)
         }
-        triggerFlipUpHaptic()
     }
 
     private fun restoreDndIfNeeded() {
@@ -974,13 +1007,14 @@ class ShhhService : Service(), SensorEventListener {
     }
 
     companion object {
-        const val CHANNEL_ID = "shhh_service_channel"
-        const val NOTIFICATION_ID = 1001
+        private const val CHANNEL_ID = "shhh_service_channel"
+        private const val NOTIFICATION_ID = 1001
         private const val TAG = "ShhhService"
 
         private const val MAX_GYRO_DISTURBANCE = 0.50f
         private const val REQUIRED_DISTURBANCE_SAMPLES = 2
-        private const val MAX_CLOCK_SKEW_MS = 5_000L
+        // Keep accepted sensor clock skew strictly below StillnessDetector.maxSampleAgeMs (600 ms).
+        private const val MAX_CLOCK_SKEW_MS = 300L
         private const val IDLE_BATCH_LATENCY_US = 500_000
         private const val EXIT_VALIDATION_TIMEOUT_MS = 1_000L
 

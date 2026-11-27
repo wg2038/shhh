@@ -715,4 +715,30 @@ class FlipStateMachineTest {
         assertEquals(FlipStateMachine.Phase.FLIPPED, infDecision.phase)
         assertEquals(FlipStateMachine.Target.NONE, infDecision.pendingTarget)
     }
+
+    @Test
+    fun disablingGyroscopeMidPendingExtendsDebounceToNoGyroWindow() {
+        val machine = FlipStateMachine(
+            hasGyroscope = true,
+            hasOpticalProximity = false,
+            config = fastConfig,
+        )
+
+        val initial = machine.onObservation(observation(100L))
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, initial.phase)
+        assertEquals(200L, initial.scheduleCheckAtMs)
+
+        val extendedDeadline = machine.disableGyroscope(120L)
+        assertEquals(270L, extendedDeadline)
+
+        // Old 200ms deadline should now reschedule instead of failing stillness early.
+        val earlyCheck = machine.onTimer(200L, stationary())
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, earlyCheck.phase)
+        assertEquals(270L, earlyCheck.scheduleCheckAtMs)
+
+        val confirmed = machine.onTimer(270L, stationary())
+        assertEquals(FlipStateMachine.Phase.FLIPPED, confirmed.phase)
+        assertTrue(confirmed.enterDnd)
+        assertNull(machine.disableGyroscope(300L))
+    }
 }
