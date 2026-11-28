@@ -20,9 +20,12 @@ class FlipStateMachine(
         val maxDownPendingMs: Long? = null,
         val minGravityMagnitude: Float = 8.0f,
         val maxGravityMagnitude: Float = 12.0f,
-        // cos(15.2 deg) for face-down entry, cos(30.0 deg) for lift exit hysteresis.
+        // cos(15.2 deg) for face-down entry, cos(20.0 deg) for pending abort hysteresis,
+        // and cos(30.0 deg) for lift exit hysteresis.
         val enterCosTiltThreshold: Float = 0.965f,
+        val pendingAbortCosTiltThreshold: Float = 0.940f,
         val exitCosTiltThreshold: Float = 0.866f,
+        val minPendingGravityMagnitude: Float = 2.0f,
     )
 
     enum class Phase {
@@ -88,6 +91,7 @@ class FlipStateMachine(
     private var downPendingStartMs = 0L
     private var lastProximity: Proximity = defaultProximity()
     private var lastTiltExit: Boolean = false
+    private var lastValidRestingGravity: Boolean = false
 
     fun reset(startFlipped: Boolean = false) {
         phase = if (startFlipped) Phase.FLIPPED else Phase.IDLE
@@ -96,6 +100,7 @@ class FlipStateMachine(
         suppressedUntilLifted = false
         lastProximity = defaultProximity()
         lastTiltExit = false
+        lastValidRestingGravity = false
         deadlineMs = 0L
         downPendingStartMs = 0L
     }
@@ -138,6 +143,7 @@ class FlipStateMachine(
                 stillnessRetryCount = 0
                 lastProximity = observation.proximity
                 lastTiltExit = false
+                lastValidRestingGravity = validRestingGravity
                 downPendingStartMs = observation.timestampMs
                 deadlineMs = observation.timestampMs + downDebounceMs
                 return decision(
@@ -150,8 +156,13 @@ class FlipStateMachine(
             Phase.DOWN_PENDING -> {
                 val prevProximity = lastProximity
                 lastProximity = observation.proximity
+                lastValidRestingGravity = validRestingGravity
 
-                if (!faceDownPose) {
+                // Apply tilt hysteresis and tolerate brief landing impact spikes (> maxGravityMagnitude)
+                // during DOWN_PENDING so sensor noise near 15 deg or landing bounce doesn't thrash.
+                val pendingAborted = totalG < config.minPendingGravityMagnitude ||
+                    (totalG > 0f && cosTilt < config.pendingAbortCosTiltThreshold)
+                if (pendingAborted) {
                     resetToIdle(clearSuppression = false)
                     return decision(
                         releaseWakeLock = true,
@@ -162,6 +173,9 @@ class FlipStateMachine(
 
                 // Restart the stillness window when the phone transitions from mid-air onto a surface.
                 if (observation.proximity is Proximity.Near && prevProximity is Proximity.Far) {
+                    if (observation.timestampMs - downPendingStartMs >= maxDownPendingMs) {
+                        return enterCooldown(blockedByProximity = false)
+                    }
                     deadlineMs = observation.timestampMs + downDebounceMs
                     return decision(
                         acquireWakeLockMs = downDebounceMs + WAKE_LOCK_MARGIN_MS,
@@ -216,7 +230,7 @@ class FlipStateMachine(
                 }
 
                 val proximityPermitted = isProximityPermittingAt()
-                if (proximityPermitted && stillness?.isStationary == true) {
+                if (lastValidRestingGravity && proximityPermitted && stillness?.isStationary == true) {
                     phase = Phase.FLIPPED
                     pendingTarget = Target.NONE
                     lastTiltExit = false
@@ -331,6 +345,7 @@ class FlipStateMachine(
         stillnessRetryCount = 0
         lastProximity = defaultProximity()
         lastTiltExit = false
+        lastValidRestingGravity = false
         deadlineMs = 0L
         downPendingStartMs = 0L
         if (clearSuppression) {

@@ -4,10 +4,18 @@
     <string name="accessibility_service_desc">Shhh auto-lock screen service (used exclusively to lock screen when phone is face down, retaining Fingerprint and Face Unlock support).</string>
 
     <string name="perm_dnd_title">Do Not Disturb Access</string>
-    <string name="perm_dnd_required">Tap to grant DND access</string>
+    <string name="perm_dnd_required">Shhh needs Do Not Disturb access to automatically silence notifications when your phone is placed face down.</string>
     <string name="perm_battery_title">Unrestricted Battery</string>
+    <string name="perm_accessibility_title">Enable Flip to Lock Screen</string>
+    <string name="perm_accessibility_message">Shhh uses Android\'s Accessibility Service solely to lock the screen when placed face down while preserving Fingerprint and Face Unlock. No screen content is ever read.\n\nIf the toggle is greyed out as a restricted setting (common for GitHub APK installs on Android 13+), open System Settings → Apps → Shhh → ⋮ → Allow restricted settings first.</string>
     <string name="grant_btn">Grant</string>
+    <string name="btn_open_settings">Open Settings</string>
     <string name="btn_cancel">Cancel</string>
+
+    <string name="hero_toggle_desc">Flip to mute service</string>
+    <string name="hero_state_active">Do Not Disturb active</string>
+    <string name="hero_state_listening">Listening</string>
+    <string name="hero_state_stopped">Stopped</string>
 
     <string name="toolbar_autostart">Auto-start on Boot</string>
     <string name="toolbar_autolock">Flip to Lock Screen</string>

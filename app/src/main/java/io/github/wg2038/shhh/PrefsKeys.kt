@@ -10,4 +10,5 @@ object PrefsKeys {
     const val KEY_AUTO_START_BOOT = "auto_start_on_boot"
     const val KEY_SERVICE_USER_ENABLED = "service_user_enabled"
     const val KEY_TOOLBAR_HINT_SEEN = "toolbar_hint_seen"
+    const val KEY_NOTIF_PERMISSION_ASKED = "notif_permission_asked"
 }

@@ -4,10 +4,18 @@
     <string name="accessibility_service_desc">Shhh 自动锁屏服务（仅用于手机面朝下时自动熄屏锁屏，保留指纹与面部解锁支持）</string>
 
     <string name="perm_dnd_title">勿扰模式权限</string>
-    <string name="perm_dnd_required">未授权 · 点击前往设置</string>
+    <string name="perm_dnd_required">Shhh 需要“勿扰模式”权限，才能在手机面朝下放置时自动开启勿扰并在拿起时恢复。</string>
     <string name="perm_battery_title">后台无限制电池优化</string>
+    <string name="perm_accessibility_title">开启翻转自动锁屏</string>
+    <string name="perm_accessibility_message">Shhh 仅通过无障碍服务在手机面朝下放置时锁屏（保留指纹与面容解锁），不会读取任何屏幕内容。\n\n若在 Android 13+ 侧载安装后发现开关灰显并提示“受限设置”，请先前往 系统设置 → 应用 → Shhh → 右上角 ⋮ → 允许受限设置。</string>
     <string name="grant_btn">授权</string>
+    <string name="btn_open_settings">前往设置</string>
     <string name="btn_cancel">取消</string>
+
+    <string name="hero_toggle_desc">翻转静音服务开关</string>
+    <string name="hero_state_active">勿扰模式已激活</string>
+    <string name="hero_state_listening">监听中</string>
+    <string name="hero_state_stopped">已停止</string>
 
     <string name="toolbar_autostart">开机自动启动</string>
     <string name="toolbar_autolock">翻转自动锁屏</string>

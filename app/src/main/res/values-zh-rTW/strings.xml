@@ -4,10 +4,18 @@
     <string name="accessibility_service_desc">Shhh 自動鎖定螢幕服務（僅用於手機螢幕朝下時自動關閉螢幕並鎖定，保留指紋與臉部解鎖支援）</string>
 
     <string name="perm_dnd_title">勿擾模式存取權限</string>
-    <string name="perm_dnd_required">未授權 · 點擊前往設定</string>
+    <string name="perm_dnd_required">Shhh 需要「勿擾模式」權限，才能在手機螢幕朝下放置時自動開啟勿擾並於拿起時恢復。</string>
     <string name="perm_battery_title">背景無限制電池最佳化</string>
+    <string name="perm_accessibility_title">開啟翻轉自動鎖定螢幕</string>
+    <string name="perm_accessibility_message">Shhh 僅透過無障礙服務在手機螢幕朝下放置時鎖定螢幕（保留指紋與臉部解鎖），不會讀取任何螢幕內容。\n\n若在 Android 13+ 側載安裝後發現開關呈灰色並顯示「受限設定」，請先前往 系統設定 → 應用程式 → Shhh → 右上角 ⋮ → 允許受限設定。</string>
     <string name="grant_btn">授權</string>
+    <string name="btn_open_settings">前往設定</string>
     <string name="btn_cancel">取消</string>
+
+    <string name="hero_toggle_desc">翻轉靜音服務開關</string>
+    <string name="hero_state_active">勿擾模式已啟用</string>
+    <string name="hero_state_listening">監聽中</string>
+    <string name="hero_state_stopped">已停止</string>
 
     <string name="toolbar_autostart">開機自動啟動</string>
     <string name="toolbar_autolock">翻轉自動鎖定螢幕</string>

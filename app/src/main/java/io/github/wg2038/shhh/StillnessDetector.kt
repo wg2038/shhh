@@ -135,9 +135,10 @@ class StillnessDetector(
     fun result(nowMs: Long = -1L): Result {
         val latestSampleMs = max(accelBuffer.lastSampleMs, gyroBuffer.lastSampleMs)
         val evaluationTimeMs = if (nowMs >= 0L) nowMs else latestSampleMs
+        val referenceTimeMs = if (!hasAccelerometer && !hasGyroscope) evaluationTimeMs else latestSampleMs
         val warmedUp = warmupStartMs >= 0L &&
-                latestSampleMs >= 0L &&
-                latestSampleMs - warmupStartMs >= config.warmupMs
+                referenceTimeMs >= 0L &&
+                referenceTimeMs - warmupStartMs >= config.warmupMs
 
         val accelVariance = if (hasAccelerometer) {
             accelBuffer.computeVariance(config.minSamples)

@@ -52,12 +52,9 @@ abstract class GitReleaseTagsValueSource : ValueSource<String, GitReleaseTagsVal
         val repoDirPath: Property<String>
     }
 
-    override fun obtain(): String {
-        val path = parameters.repoDirPath.orNull ?: return ""
-        val dir = File(path)
-        if (!File(dir, ".git").exists()) return ""
+    private fun runGit(dir: File, vararg args: String): String {
         return try {
-            val process = ProcessBuilder("git", "tag", "--points-at", "HEAD", "--list", "v*")
+            val process = ProcessBuilder(listOf("git") + args)
                 .directory(dir)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start()
@@ -85,6 +82,18 @@ abstract class GitReleaseTagsValueSource : ValueSource<String, GitReleaseTagsVal
             ""
         }
     }
+
+    override fun obtain(): String {
+        val path = parameters.repoDirPath.orNull ?: return ""
+        val dir = File(path)
+        if (!File(dir, ".git").exists()) return ""
+        val exact = runGit(dir, "tag", "--points-at", "HEAD", "--list", "v*").trim()
+        if (exact.isNotEmpty()) {
+            return "EXACT\n$exact"
+        }
+        val merged = runGit(dir, "tag", "--merged", "HEAD", "--list", "v*").trim()
+        return if (merged.isNotEmpty()) "MERGED\n$merged" else ""
+    }
 }
 
 data class AppVersionInfo(
@@ -96,7 +105,7 @@ data class AppVersionInfo(
     val preRelease: String = "",
 )
 
-val fallbackAppVersion = AppVersionInfo(code = 1, name = "1.0.0")
+val fallbackAppVersion = AppVersionInfo(code = 10_004, name = "1.0.4-dev", major = 1L, minor = 0L, patch = 4L)
 val semverTagRegex = Regex(
     "^v(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$"
 )
@@ -204,8 +213,10 @@ fun resolveAppVersion(): AppVersionInfo {
         parameters.repoDirPath.set(rootDir.absolutePath)
     }.get()
 
-    return gitTagsOutput
-        .lineSequence()
+    val lines = gitTagsOutput.lineSequence().toList()
+    val mode = lines.firstOrNull()
+    val latestTagInfo = lines
+        .drop(1)
         .mapNotNull(::parseReleaseVersionTag)
         .sortedWith { a, b ->
             b.major.compareTo(a.major).takeIf { it != 0 }
@@ -213,7 +224,13 @@ fun resolveAppVersion(): AppVersionInfo {
                 ?: b.patch.compareTo(a.patch).takeIf { it != 0 }
                 ?: compareSemVerPreRelease(b.preRelease, a.preRelease)
         }
-        .firstOrNull() ?: fallbackAppVersion
+        .firstOrNull() ?: return fallbackAppVersion
+
+    return if (mode == "MERGED" && !latestTagInfo.name.endsWith("-dev")) {
+        latestTagInfo.copy(name = "${latestTagInfo.major}.${latestTagInfo.minor}.${latestTagInfo.patch}-dev")
+    } else {
+        latestTagInfo
+    }
 }
 
 val appVersion = resolveAppVersion()
@@ -233,7 +250,7 @@ android {
     }
 
     lint {
-        checkReleaseBuilds = false
+        checkReleaseBuilds = true
         abortOnError = true
         // Work around AGP 8.7.3 Lint Kotlin Analysis API incompatibility with lifecycle 2.9 / Compose runtime 1.9 detectors.
         disable += setOf(

@@ -8,6 +8,7 @@ import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import androidx.core.content.edit
 
 class ShhhLockAccessibilityService : AccessibilityService() {
 
@@ -18,6 +19,13 @@ class ShhhLockAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        val prefs = getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)) {
+            prefs.edit {
+                putBoolean(PrefsKeys.KEY_AUTO_LOCK_SCREEN, true)
+                putBoolean(PrefsKeys.KEY_PENDING_AUTO_LOCK_AUTH, false)
+            }
+        }
         Log.i(TAG, "ShhhLockAccessibilityService connected successfully.")
     }
 

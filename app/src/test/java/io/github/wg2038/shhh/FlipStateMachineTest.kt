@@ -741,4 +741,83 @@ class FlipStateMachineTest {
         assertTrue(confirmed.enterDnd)
         assertNull(machine.disableGyroscope(300L))
     }
+
+    @Test
+    fun pendingTiltHysteresisToleratesNearThresholdNoiseAndAbortsPastPendingLimit() {
+        val machine = FlipStateMachine(
+            hasGyroscope = true,
+            hasOpticalProximity = false,
+            config = fastConfig,
+        )
+
+        var decision = machine.onObservation(observation(0L, gravityZ = -9.8f, horizontalGravity = 0.5f))
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, decision.phase)
+
+        // ~17.3 deg tilt (cosTilt ~ 0.955): between enter (0.965) and pending abort (0.940) -> stays pending.
+        decision = machine.onObservation(observation(40L, gravityZ = -9.36f, horizontalGravity = 2.9f))
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, decision.phase)
+        assertFalse(decision.cancelScheduledCheck)
+
+        // ~23 deg tilt (cosTilt ~ 0.92): past pending abort threshold -> aborts cleanly to IDLE.
+        decision = machine.onObservation(observation(60L, gravityZ = -9.0f, horizontalGravity = 3.85f))
+        assertEquals(FlipStateMachine.Phase.IDLE, decision.phase)
+        assertTrue(decision.cancelScheduledCheck)
+        assertTrue(decision.releaseWakeLock)
+    }
+
+    @Test
+    fun landingImpactSpikeDoesNotAbortDownPendingBeforeSettling() {
+        val machine = FlipStateMachine(
+            hasGyroscope = true,
+            hasOpticalProximity = false,
+            config = fastConfig,
+        )
+
+        assertEquals(
+            FlipStateMachine.Phase.DOWN_PENDING,
+            machine.onObservation(observation(0L, gravityZ = -9.8f, horizontalGravity = 0.2f)).phase
+        )
+
+        // Brief impact spike > maxGravityMagnitude (12.0) while flat must not kick back to IDLE.
+        val impact = machine.onObservation(observation(20L, gravityZ = -14.5f, horizontalGravity = 0.3f))
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, impact.phase)
+        assertFalse(impact.cancelScheduledCheck)
+
+        // If gravity remains out of resting range at timer expiration, do not enter FLIPPED.
+        val invalidConfirm = machine.onTimer(100L, stationary())
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, invalidConfirm.phase)
+        assertFalse(invalidConfirm.enterDnd)
+
+        // Once resting gravity settles, confirmation succeeds.
+        machine.onObservation(observation(120L, gravityZ = -9.8f, horizontalGravity = 0.2f))
+        val confirmed = machine.onTimer(200L, stationary())
+        assertEquals(FlipStateMachine.Phase.FLIPPED, confirmed.phase)
+        assertTrue(confirmed.enterDnd)
+    }
+
+    @Test
+    fun repeatedProximityFarToNearExceedingMaxDownPendingBudgetCoolsDown() {
+        val machine = FlipStateMachine(
+            hasGyroscope = true,
+            hasOpticalProximity = true,
+            config = fastConfig.copy(maxDownPendingMs = 250L),
+        )
+
+        machine.onObservation(observation(0L, proximity = FlipStateMachine.Proximity.Near))
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, machine.phase)
+
+        // Far -> Near within budget extends deadline.
+        machine.onObservation(observation(50L, proximity = FlipStateMachine.Proximity.Far))
+        var decision = machine.onObservation(observation(100L, proximity = FlipStateMachine.Proximity.Near))
+        assertEquals(FlipStateMachine.Phase.DOWN_PENDING, decision.phase)
+        assertEquals(200L, decision.scheduleCheckAtMs)
+
+        // Far -> Near once maxDownPendingMs (250ms) is reached enters COOLDOWN instead of looping forever.
+        machine.onObservation(observation(180L, proximity = FlipStateMachine.Proximity.Far))
+        decision = machine.onObservation(observation(250L, proximity = FlipStateMachine.Proximity.Near))
+        assertEquals(FlipStateMachine.Phase.COOLDOWN, decision.phase)
+        assertFalse(decision.useFastSensors)
+        assertTrue(decision.cancelScheduledCheck)
+        assertTrue(decision.releaseWakeLock)
+    }
 }

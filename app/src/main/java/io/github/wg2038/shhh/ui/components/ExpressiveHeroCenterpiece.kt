@@ -45,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.toPath
@@ -67,7 +68,12 @@ fun ExpressiveHeroCenterpiece(
 ) {
     val haptic = LocalHapticFeedback.current
     val heroActive = isRunning && isFlippedDown && isDndActive
-    val heroDescription = stringResource(R.string.app_name)
+    val heroDescription = stringResource(R.string.hero_toggle_desc)
+    val heroStateDescription = when {
+        heroActive -> stringResource(R.string.hero_state_active)
+        isRunning -> stringResource(R.string.hero_state_listening)
+        else -> stringResource(R.string.hero_state_stopped)
+    }
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -168,7 +174,10 @@ fun ExpressiveHeroCenterpiece(
         Box(
             modifier = Modifier
                 .size(heroSize)
-                .semantics { contentDescription = heroDescription }
+                .semantics {
+                    contentDescription = heroDescription
+                    stateDescription = heroStateDescription
+                }
                 .toggleable(
                     value = isRunning,
                     interactionSource = interactionSource,

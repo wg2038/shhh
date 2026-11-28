@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,7 +21,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -134,48 +137,52 @@ fun OnboardingScreen(
 private fun OnboardingWelcomePage(
     onNext: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
-                .size(116.dp)
-                .clip(ExpressiveShapeTokens.ExtraExtraLarge)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(horizontal = 32.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = AppIcons.DoNotDisturbOn,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(64.dp)
-            )
-        }
+            Box(
+                modifier = Modifier
+                    .size(116.dp)
+                    .clip(ExpressiveShapeTokens.ExtraExtraLarge)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = AppIcons.DoNotDisturbOn,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(64.dp)
+                )
+            }
 
-        Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-        Text(
-            text = stringResource(R.string.onboarding_welcome_title),
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(36.dp))
-
-        FilledTonalButton(
-            onClick = onNext,
-            shape = ExpressiveShapeTokens.Full,
-            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp)
-        ) {
             Text(
-                text = stringResource(R.string.onboarding_next_btn),
-                style = ExpressiveTypographyTokens.ButtonText
+                text = stringResource(R.string.onboarding_welcome_title),
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
             )
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            FilledTonalButton(
+                onClick = onNext,
+                shape = ExpressiveShapeTokens.Full,
+                contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.onboarding_next_btn),
+                    style = ExpressiveTypographyTokens.ButtonText
+                )
+            }
         }
     }
 }
@@ -188,62 +195,66 @@ private fun OnboardingPermissionsPage(
     onRequestBatteryOptimization: () -> Unit,
     onComplete: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = stringResource(R.string.onboarding_perm_title),
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            OnboardingPermissionItem(
-                icon = AppIcons.DoNotDisturbOn,
-                title = stringResource(R.string.perm_dnd_title),
-                isGranted = hasDndPermission,
-                grantLabel = stringResource(R.string.grant_btn),
-                shape = ExpressiveShapeTokens.SegmentedTop,
-                onGrant = onGrantDnd
-            )
-
-            OnboardingPermissionItem(
-                icon = AppIcons.BatterySaver,
-                title = stringResource(R.string.perm_battery_title),
-                isGranted = isIgnoringBatteryOptimization,
-                grantLabel = stringResource(R.string.grant_btn),
-                shape = ExpressiveShapeTokens.SegmentedBottom,
-                onGrant = onRequestBatteryOptimization
-            )
-        }
-
-        Spacer(modifier = Modifier.height(36.dp))
-
-        Button(
-            onClick = onComplete,
-            enabled = hasDndPermission,
-            shape = ExpressiveShapeTokens.Full,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            ),
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 54.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(horizontal = 24.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = stringResource(R.string.onboarding_start_btn),
-                style = ExpressiveTypographyTokens.ButtonText
+                text = stringResource(R.string.onboarding_perm_title),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
             )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                OnboardingPermissionItem(
+                    icon = AppIcons.DoNotDisturbOn,
+                    title = stringResource(R.string.perm_dnd_title),
+                    isGranted = hasDndPermission,
+                    grantLabel = stringResource(R.string.grant_btn),
+                    shape = ExpressiveShapeTokens.SegmentedTop,
+                    onGrant = onGrantDnd
+                )
+
+                OnboardingPermissionItem(
+                    icon = AppIcons.BatterySaver,
+                    title = stringResource(R.string.perm_battery_title),
+                    isGranted = isIgnoringBatteryOptimization,
+                    grantLabel = stringResource(R.string.grant_btn),
+                    shape = ExpressiveShapeTokens.SegmentedBottom,
+                    onGrant = onRequestBatteryOptimization
+                )
+            }
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            Button(
+                onClick = onComplete,
+                enabled = hasDndPermission,
+                shape = ExpressiveShapeTokens.Full,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 54.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.onboarding_start_btn),
+                    style = ExpressiveTypographyTokens.ButtonText
+                )
+            }
         }
     }
 }

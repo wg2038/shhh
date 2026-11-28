@@ -33,7 +33,6 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 @Composable
 private fun SystemBarsColorEffect(darkTheme: Boolean) {
@@ -109,33 +108,36 @@ object MonetThemeResolver {
         }
     }
 
-    private fun isOverlayActive(raw: String?): Boolean {
+    internal fun isOverlayActive(raw: String?): Boolean {
         if (raw.isNullOrBlank() || raw == "{}") return false
         return raw.contains("system_palette") ||
             raw.contains("accent_color") ||
             raw.contains("color_source")
     }
 
-    private fun parseOverlaySeedArgb(raw: String?): Int? {
-        if (raw.isNullOrBlank() || raw == "{}") return null
-        return try {
-            val json = JSONObject(raw)
-            val hexValue = listOf(
-                "android.theme.customization.system_palette",
-                "android.theme.customization.accent_color",
-            ).firstNotNullOfOrNull { key ->
-                if (json.isNull(key)) null else json.optString(key).takeIf { it.isNotBlank() }
-            } ?: return null
-            val cleaned = hexValue.trim().removePrefix("#").removePrefix("0x").removePrefix("0X")
-            val argbHex = when (cleaned.length) {
-                6 -> "FF$cleaned"
-                8 -> cleaned
-                else -> return null
-            }
-            argbHex.toLong(16).toInt()
-        } catch (_: Throwable) {
-            null
+    internal fun parseOverlaySeedArgb(raw: String?): Int? {
+        val trimmed = raw?.trim()
+        if (trimmed.isNullOrEmpty() || trimmed == "{}" || !trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            return null
         }
+        val hexValue = listOf(
+            "android.theme.customization.system_palette",
+            "android.theme.customization.accent_color",
+        ).firstNotNullOfOrNull { key ->
+            extractJsonStringField(trimmed, key)?.takeIf { it.isNotBlank() }
+        } ?: return null
+        val cleaned = hexValue.trim().removePrefix("#").removePrefix("0x").removePrefix("0X")
+        val argbHex = when (cleaned.length) {
+            6 -> "FF$cleaned"
+            8 -> cleaned
+            else -> return null
+        }
+        return argbHex.toLongOrNull(16)?.toInt()
+    }
+
+    private fun extractJsonStringField(jsonObject: String, key: String): String? {
+        val pattern = Regex("\"${Regex.escape(key)}\"\\s*:\\s*\"([^\"]*)\"")
+        return pattern.find(jsonObject)?.groupValues?.getOrNull(1)
     }
 
     private fun readSystemAccent1Check(context: Context, darkTheme: Boolean): Int? {
@@ -323,13 +325,14 @@ object MonetThemeResolver {
 @Composable
 fun ShhhTheme(
     updateKey: Int = 0,
+    initialColorScheme: ColorScheme? = null,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
     val darkTheme = isSystemInDarkTheme()
 
     var colorScheme by remember {
-        mutableStateOf(MonetThemeResolver.resolveColorScheme(context, darkTheme))
+        mutableStateOf(initialColorScheme ?: MonetThemeResolver.resolveColorScheme(context, darkTheme))
     }
     var lastResolvedKey by remember { mutableIntStateOf(updateKey) }
     var lastResolvedDark by remember { mutableStateOf(darkTheme) }

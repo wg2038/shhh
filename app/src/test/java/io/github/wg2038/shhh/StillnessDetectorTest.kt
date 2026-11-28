@@ -17,6 +17,7 @@ class StillnessDetectorTest {
 
     private val period50Hz = 20L
     private val defaultSamples = 150
+    private val defaultConfig = StillnessDetector.Config()
 
     private fun gauss(random: Random, sigma: Double): Float =
         (random.nextGaussian() * sigma).toFloat()
@@ -59,8 +60,14 @@ class StillnessDetectorTest {
         println("Table: $result")
 
         assertTrue("tabletop window must be warmed up", result.warmedUp)
-        assertTrue("tabletop accel variance ${result.accelVariance} too high", result.accelVariance <= 0.0015f)
-        assertTrue("tabletop gyro variance ${result.gyroVariance} too high", result.gyroVariance <= 0.00030f)
+        assertTrue(
+            "tabletop accel variance ${result.accelVariance} exceeds ${defaultConfig.maxAccelVariance}",
+            result.accelVariance <= defaultConfig.maxAccelVariance
+        )
+        assertTrue(
+            "tabletop gyro variance ${result.gyroVariance} exceeds ${defaultConfig.maxGyroVariance}",
+            result.gyroVariance <= defaultConfig.maxGyroVariance
+        )
         assertTrue("rigid tabletop must be stationary", result.isStationary)
     }
 
@@ -93,8 +100,14 @@ class StillnessDetectorTest {
         val result = detector.result()
         println("Handheld: $result")
 
-        assertTrue("hand tremor must exceed the accel threshold", result.accelVariance > 0.0015f)
-        assertTrue("hand sway must exceed the gyro threshold", result.gyroVariance > 0.00030f)
+        assertTrue(
+            "hand tremor must exceed accel threshold (${defaultConfig.maxAccelVariance})",
+            result.accelVariance > defaultConfig.maxAccelVariance
+        )
+        assertTrue(
+            "hand sway must exceed gyro threshold (${defaultConfig.maxGyroVariance})",
+            result.gyroVariance > defaultConfig.maxGyroVariance
+        )
         assertFalse("handheld mid-air pose must be rejected", result.isStationary)
     }
 
@@ -108,7 +121,10 @@ class StillnessDetectorTest {
         val result = detector.result()
         println("Biased gyro: $result")
 
-        assertTrue("bias must be removed by de-meaned variance", result.gyroVariance <= 0.00030f)
+        assertTrue(
+            "bias must be removed by de-meaned variance",
+            result.gyroVariance <= defaultConfig.maxGyroVariance
+        )
         assertTrue(result.isStationary)
     }
 
@@ -178,7 +194,10 @@ class StillnessDetectorTest {
         val result = detector.result()
         println("No gyro shake: $result")
 
-        assertTrue("accel-only shake must exceed the tighter threshold", result.accelVariance > 0.0010f)
+        assertTrue(
+            "accel-only shake must exceed tighter threshold (${defaultConfig.maxAccelVarianceWithoutGyro})",
+            result.accelVariance > defaultConfig.maxAccelVarianceWithoutGyro
+        )
         assertFalse("handheld shake must be rejected without a gyroscope", result.isStationary)
     }
 
@@ -235,5 +254,16 @@ class StillnessDetectorTest {
 
         val result = detector.result(nowMs = 3_000L)
         assertTrue("stray non-finite samples must not poison valid window", result.isStationary)
+    }
+
+    @Test
+    fun fallbackWithoutStillnessSensorsWarmsUpByEvaluationTime() {
+        val detector = StillnessDetector(hasGyroscope = false, hasAccelerometer = false)
+        detector.reset(1_000L)
+
+        assertFalse(detector.result(nowMs = 1_200L).warmedUp)
+        val afterWarmup = detector.result(nowMs = 1_400L)
+        assertTrue(afterWarmup.warmedUp)
+        assertTrue(afterWarmup.isStationary)
     }
 }

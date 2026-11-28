@@ -146,60 +146,123 @@ fun HomeScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 24.dp)
         ) {
-            val compactLayout = maxHeight < 520.dp
-            val heroSize = if (compactLayout) 200.dp else 260.dp
-            val heroOffset = if (compactLayout) (-36).dp else (-8).dp
+            val compactHeight = maxHeight < 520.dp
+            val narrowWidth = maxWidth < 320.dp
+            val useStackedLayout = compactHeight || narrowWidth
 
-            ExpressiveHeroCenterpiece(
-                isRunning = isEffectiveRunning,
-                isFlippedDown = isFlippedDown,
-                isDndActive = isDndActive,
-                onToggle = onToggleService,
-                heroSize = heroSize,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .offset(y = heroOffset)
-            )
+            val dismissAndToggleAutoStart: (Boolean) -> Unit = {
+                if (showToolbarHint) onDismissToolbarHint()
+                onToggleAutoStart(it)
+            }
+            val dismissAndToggleAutoLock: (Boolean) -> Unit = {
+                if (showToolbarHint) onDismissToolbarHint()
+                onToggleAutoLock(it)
+            }
+            val dismissAndOpenAbout: () -> Unit = {
+                if (showToolbarHint) onDismissToolbarHint()
+                showAboutDialog = true
+            }
 
-            ExpressiveFloatingToolbar(
-                autoStartEnabled = autoStartEnabled,
-                autoLockEnabled = autoLockEnabled,
-                onToggleAutoStart = {
-                    if (showToolbarHint) onDismissToolbarHint()
-                    onToggleAutoStart(it)
-                },
-                onToggleAutoLock = {
-                    if (showToolbarHint) onDismissToolbarHint()
-                    onToggleAutoLock(it)
-                },
-                onOpenAbout = {
-                    if (showToolbarHint) onDismissToolbarHint()
-                    showAboutDialog = true
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 24.dp)
-            )
+            if (useStackedLayout) {
+                val reservedBottom = if (showToolbarHint) 220.dp else 120.dp
+                val heroSize = minOf(
+                    200.dp,
+                    maxWidth * 0.65f,
+                    (maxHeight - reservedBottom).coerceAtLeast(108.dp)
+                )
 
-            AnimatedVisibility(
-                visible = showToolbarHint,
-                enter = scaleIn(
-                    animationSpec = ExpressiveMotionTokens.defaultSpatial(),
-                    initialScale = 0.88f,
-                    transformOrigin = TransformOrigin(0.5f, 1f)
-                ) + fadeIn(ExpressiveMotionTokens.fastEffects()),
-                exit = scaleOut(
-                    animationSpec = ExpressiveMotionTokens.fastEffects(),
-                    targetScale = 0.92f,
-                    transformOrigin = TransformOrigin(0.5f, 1f)
-                ) + fadeOut(ExpressiveMotionTokens.fastEffects()),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 96.dp)
-            ) {
-                ToolbarOnboardingTooltip(onDismiss = onDismissToolbarHint)
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ExpressiveHeroCenterpiece(
+                            isRunning = isEffectiveRunning,
+                            isFlippedDown = isFlippedDown,
+                            isDndActive = isDndActive,
+                            onToggle = onToggleService,
+                            heroSize = heroSize,
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = showToolbarHint,
+                        enter = scaleIn(
+                            animationSpec = ExpressiveMotionTokens.defaultSpatial(),
+                            initialScale = 0.88f,
+                            transformOrigin = TransformOrigin(0.5f, 1f)
+                        ) + fadeIn(ExpressiveMotionTokens.fastEffects()),
+                        exit = scaleOut(
+                            animationSpec = ExpressiveMotionTokens.fastEffects(),
+                            targetScale = 0.92f,
+                            transformOrigin = TransformOrigin(0.5f, 1f)
+                        ) + fadeOut(ExpressiveMotionTokens.fastEffects()),
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        ToolbarOnboardingTooltip(onDismiss = onDismissToolbarHint)
+                    }
+
+                    ExpressiveFloatingToolbar(
+                        autoStartEnabled = autoStartEnabled,
+                        autoLockEnabled = autoLockEnabled,
+                        onToggleAutoStart = dismissAndToggleAutoStart,
+                        onToggleAutoLock = dismissAndToggleAutoLock,
+                        onOpenAbout = dismissAndOpenAbout,
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .padding(bottom = 20.dp)
+                    )
+                }
+            } else {
+                val heroSize = minOf(260.dp, maxWidth * 0.72f)
+
+                ExpressiveHeroCenterpiece(
+                    isRunning = isEffectiveRunning,
+                    isFlippedDown = isFlippedDown,
+                    isDndActive = isDndActive,
+                    onToggle = onToggleService,
+                    heroSize = heroSize,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .offset(y = (-8).dp)
+                )
+
+                ExpressiveFloatingToolbar(
+                    autoStartEnabled = autoStartEnabled,
+                    autoLockEnabled = autoLockEnabled,
+                    onToggleAutoStart = dismissAndToggleAutoStart,
+                    onToggleAutoLock = dismissAndToggleAutoLock,
+                    onOpenAbout = dismissAndOpenAbout,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 24.dp)
+                )
+
+                AnimatedVisibility(
+                    visible = showToolbarHint,
+                    enter = scaleIn(
+                        animationSpec = ExpressiveMotionTokens.defaultSpatial(),
+                        initialScale = 0.88f,
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    ) + fadeIn(ExpressiveMotionTokens.fastEffects()),
+                    exit = scaleOut(
+                        animationSpec = ExpressiveMotionTokens.fastEffects(),
+                        targetScale = 0.92f,
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    ) + fadeOut(ExpressiveMotionTokens.fastEffects()),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 96.dp)
+                ) {
+                    ToolbarOnboardingTooltip(onDismiss = onDismissToolbarHint)
+                }
             }
         }
     }
@@ -225,6 +288,10 @@ private fun ToolbarOnboardingTooltip(onDismiss: () -> Unit) {
             TooltipLegendRow(
                 icon = AppIcons.Lock,
                 label = stringResource(R.string.toolbar_autolock)
+            )
+            TooltipLegendRow(
+                icon = AppIcons.Info,
+                label = stringResource(R.string.toolbar_about)
             )
         }
     }
